@@ -10,8 +10,8 @@ function setup(){
    const etag=String(++seq);map.set(key,{data:structuredClone(data),etag});return{modified:true,etag};
   },async get(key){return structuredClone(map.get(key)?.data??null);},async getWithMetadata(key){return structuredClone(map.get(key)??null);},async delete(key){map.delete(key);},async list(){return{blobs:[...map.keys()].map(key=>({key}))};}
  };
- const env={OPENAI_API_KEY:'test-only',APP_ACCESS_TOKEN:'a'.repeat(64),URL:'https://example.netlify.app'};
- const h=handlers({store,env,now:()=>clock,fetchImpl:async(url,options)=>{trigger={url,options};return new Response(null,{status:202});},analyseImpl:async()=>{paid++;return{testReport:true};}});
+ const env={GEMINI_API_KEY:'test-only',APP_ACCESS_TOKEN:'a'.repeat(64),URL:'https://example.netlify.app'};
+ const h=handlers({store,env,now:()=>clock,fetchImpl:async(url,options)=>{trigger={url,options};return new Response(null,{status:202});},analyseImpl:async(input,options)=>{assert.equal(options.apiKey,env.GEMINI_API_KEY);assert.equal(options.model,'gemini-2.5-flash-lite');paid++;return{testReport:true};}});
  const auth={authorization:'Bearer '+env.APP_ACCESS_TOKEN,'content-type':'application/json'};
  const input={goal:'Fat loss',compare:false,products:[{id:'p0',text:'Ingredients: oats. Nutrition per 100 g: 300 kcal, protein 10 g.'}]};
  const start=()=>h.start(new Request(env.URL+'/analyse',{method:'POST',headers:auth,body:JSON.stringify(input)}));
@@ -40,7 +40,7 @@ test('expired reports are inaccessible and cleanup removes expired quota entries
  const s=setup(),{jobId}=await(await s.start()).json();s.advance();assert.equal((await s.status(jobId)).status,410);await s.h.cleanup();assert.equal(s.map.size,0);
 });
 test('configuration and invalid-job errors are explicit',async()=>{
- const s=setup();assert.equal((await s.status('invalid')).status,400);delete s.env.OPENAI_API_KEY;assert.equal((await s.h.health(new Request(s.env.URL))).status,503);
+ const s=setup();assert.equal((await s.status('invalid')).status,400);delete s.env.GEMINI_API_KEY;assert.equal((await s.h.health(new Request(s.env.URL))).status,503);
 });
 test('failed provider marks job failed and removes input',async()=>{
  const s=setup(),h=handlers({store:s.store,env:s.env,now:()=>10000000000,analyseImpl:async()=>{throw new Error('private secret detail');}});
@@ -51,20 +51,25 @@ test('failed provider marks job failed and removes input',async()=>{
 });
 test('runtime reads Netlify values directly even when process env has no enumerable keys',async()=>{
  const {readEnvironment}=await import('./lib/runtime.mjs');
- const values={OPENAI_API_KEY:' test-key ',APP_ACCESS_TOKEN:'x'.repeat(64),OPENAI_MODEL:'test-model'};
+ const values={GEMINI_API_KEY:' test-key ',APP_ACCESS_TOKEN:'x'.repeat(64),GEMINI_MODEL:'test-model'};
  const result=readEnvironment({site:{url:'https://production.example'}},{env:{get:key=>values[key]}},{});
- assert.equal(result.OPENAI_API_KEY,'test-key');assert.equal(result.APP_ACCESS_TOKEN.length,64);assert.equal(result.URL,'https://production.example');
+ assert.equal(result.GEMINI_API_KEY,'test-key');assert.equal(result.APP_ACCESS_TOKEN.length,64);assert.equal(result.URL,'https://production.example');
 });
 test('runtime fallback supports non-enumerable variables without exposing them',async()=>{
  const {readEnvironment}=await import('./lib/runtime.mjs');const env={};
- Object.defineProperty(env,'OPENAI_API_KEY',{value:'hidden-test-key',enumerable:false});
- assert.deepEqual({...env},{});assert.equal(readEnvironment(undefined,undefined,env).OPENAI_API_KEY,'hidden-test-key');
+ Object.defineProperty(env,'GEMINI_API_KEY',{value:'hidden-test-key',enumerable:false});
+ assert.deepEqual({...env},{});assert.equal(readEnvironment(undefined,undefined,env).GEMINI_API_KEY,'hidden-test-key');
 });
 test('configuration errors distinguish missing key, missing token and short token',async()=>{
  const s=setup();s.env.APP_ACCESS_TOKEN='short';
  assert.match((await(await s.h.health(new Request(s.env.URL))).json()).error,/shorter than 32/);
  delete s.env.APP_ACCESS_TOKEN;
  assert.match((await(await s.h.health(new Request(s.env.URL))).json()).error,/APP_ACCESS_TOKEN is unavailable/);
- delete s.env.OPENAI_API_KEY;
- assert.match((await(await s.h.health(new Request(s.env.URL))).json()).error,/OPENAI_API_KEY is unavailable/);
+ delete s.env.GEMINI_API_KEY;
+ assert.match((await(await s.h.health(new Request(s.env.URL))).json()).error,/GEMINI_API_KEY is unavailable/);
+});
+
+test('health identifies Gemini without making an API call',async()=>{
+ const s=setup();const result=await(await s.h.health(new Request(s.env.URL))).json();
+ assert.equal(result.provider,'gemini');assert.equal(result.model,'gemini-2.5-flash-lite');assert.equal(s.paid,0);
 });
