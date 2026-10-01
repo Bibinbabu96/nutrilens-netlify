@@ -49,3 +49,22 @@ test('failed provider marks job failed and removes input',async()=>{
  await h.worker(new Request(s.env.URL,{method:'POST',headers:{'content-type':'application/json','x-job-signature':signature},body:JSON.stringify({id:jobId})}));
  const result=await(await s.status(jobId)).json();assert.equal(result.state,'failed');assert.ok(!result.error.includes('private secret'));assert.equal(s.map.get('job/'+jobId).data.input,undefined);
 });
+test('runtime reads Netlify values directly even when process env has no enumerable keys',async()=>{
+ const {readEnvironment}=await import('./lib/runtime.mjs');
+ const values={OPENAI_API_KEY:' test-key ',APP_ACCESS_TOKEN:'x'.repeat(64),OPENAI_MODEL:'test-model'};
+ const result=readEnvironment({site:{url:'https://production.example'}},{env:{get:key=>values[key]}},{});
+ assert.equal(result.OPENAI_API_KEY,'test-key');assert.equal(result.APP_ACCESS_TOKEN.length,64);assert.equal(result.URL,'https://production.example');
+});
+test('runtime fallback supports non-enumerable variables without exposing them',async()=>{
+ const {readEnvironment}=await import('./lib/runtime.mjs');const env={};
+ Object.defineProperty(env,'OPENAI_API_KEY',{value:'hidden-test-key',enumerable:false});
+ assert.deepEqual({...env},{});assert.equal(readEnvironment(undefined,undefined,env).OPENAI_API_KEY,'hidden-test-key');
+});
+test('configuration errors distinguish missing key, missing token and short token',async()=>{
+ const s=setup();s.env.APP_ACCESS_TOKEN='short';
+ assert.match((await(await s.h.health(new Request(s.env.URL))).json()).error,/shorter than 32/);
+ delete s.env.APP_ACCESS_TOKEN;
+ assert.match((await(await s.h.health(new Request(s.env.URL))).json()).error,/APP_ACCESS_TOKEN is unavailable/);
+ delete s.env.OPENAI_API_KEY;
+ assert.match((await(await s.h.health(new Request(s.env.URL))).json()).error,/OPENAI_API_KEY is unavailable/);
+});
