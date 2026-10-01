@@ -11,7 +11,7 @@ function setup(){
   },async get(key){return structuredClone(map.get(key)?.data??null);},async getWithMetadata(key){return structuredClone(map.get(key)??null);},async delete(key){map.delete(key);},async list(){return{blobs:[...map.keys()].map(key=>({key}))};}
  };
  const env={GEMINI_API_KEY:'test-only',APP_ACCESS_TOKEN:'a'.repeat(64),URL:'https://example.netlify.app'};
- const h=handlers({store,env,now:()=>clock,fetchImpl:async(url,options)=>{trigger={url,options};return new Response(null,{status:202});},analyseImpl:async(input,options)=>{assert.equal(options.apiKey,env.GEMINI_API_KEY);assert.equal(options.model,'gemini-2.5-flash-lite');paid++;return{testReport:true};}});
+ const h=handlers({store,env,now:()=>clock,fetchImpl:async(url,options)=>{trigger={url,options};return new Response(null,{status:202});},analyseImpl:async(input,options)=>{assert.equal(options.apiKey,env.GEMINI_API_KEY);assert.equal(options.model,'gemini-flash-lite-latest');paid++;return{testReport:true};}});
  const auth={authorization:'Bearer '+env.APP_ACCESS_TOKEN,'content-type':'application/json'};
  const input={goal:'Fat loss',compare:false,products:[{id:'p0',text:'Ingredients: oats. Nutrition per 100 g: 300 kcal, protein 10 g.'}]};
  const start=()=>h.start(new Request(env.URL+'/analyse',{method:'POST',headers:auth,body:JSON.stringify(input)}));
@@ -71,5 +71,5 @@ test('configuration errors distinguish missing key, missing token and short toke
 
 test('health identifies Gemini without making an API call',async()=>{
  const s=setup();const result=await(await s.h.health(new Request(s.env.URL))).json();
- assert.equal(result.provider,'gemini');assert.equal(result.model,'gemini-2.5-flash-lite');assert.equal(s.paid,0);
+ assert.equal(result.provider,'gemini');assert.equal(result.model,'gemini-flash-lite-latest');assert.equal(s.paid,0);
 });

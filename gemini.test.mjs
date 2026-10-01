@@ -50,7 +50,7 @@ test('Gemini request preserves structured report contract for one and five scans
  for(const n of [1,5]){
   let request;
   const report=await analyse(input(n),{apiKey:'test-key',fetchImpl:async(url,options)=>{
-   assert.equal(url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent');
+   assert.equal(url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent');
    assert.equal(options.headers['x-goog-api-key'],'test-key');assert.equal(options.redirect,'error');
    request=JSON.parse(options.body);
    return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({products:input(n).products.map(p=>product(p.id))})}]}}]});
